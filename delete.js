@@ -5,7 +5,7 @@ var queue = require('./lib/queue');
 var logger = require('./lib/logger').logger(settings.logFile);
 
 var util = require('util');
-
+var fs = require('fs');
 
 //删除队列的API
 var removeQ = queue.getQueue('http://'+settings.queue.host+':'+settings.queue.port+'/queue', settings.queue.remove);
@@ -105,3 +105,4 @@ var Remover = function(){
 };
 
 util.inherits(Remover, events.EventEmitter);
+fs.writeFileSync(__dirname + '/server.pid', process.pid.toString(), 'ascii');
