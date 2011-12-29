@@ -4,9 +4,10 @@
     "description": "delete micro blog to weibo.com",
     "author": "iamlaobie <iamlaobie@gmail.com>",
     "dependencies": {
-        "zmq": ">= 2.0.0",
         "devent": "https://github.com/netgen-inc/devent/tarball/master",
-        "queuer": "https://github.com/netgen-inc/queuer/tarball/master"
+        "queuer": "https://github.com/netgen-inc/queuer/tarball/master",
+        "mysql": ">= 0.9.5",
+        "request":">=2.9.3"
     },
     "scripts": {
         "start": "node delete.js"

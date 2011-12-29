@@ -1,7 +1,7 @@
 var settings = require('./etc/settings').settings;
 var url = require('url');
-var Hook = require('hook.io').Hook;
-var queue = require('./lib/queue');
+var queue = require('queuer');
+var de = require('devent').createDEvent('sender');
 var logger = require('./lib/logger').logger(settings.logFile);
 
 var util = require('util');
@@ -11,7 +11,7 @@ var fs = require('fs');
 var removeQ = queue.getQueue('http://'+settings.queue.host+':'+settings.queue.port+'/queue', settings.queue.remove);
 
 //新浪微博的API
-var weibo = require('../sender/lib/sina').weibo;
+var weibo = require('./lib/sina').weibo;
 weibo.init(settings);
 
 //初始化mysql客户端
@@ -25,21 +25,12 @@ Date.prototype.getStamp = function(){
     return parseInt(time / 1000);
 }
 
-var hook = new Hook( {
-    name: 'sender',   // 根据模块进行修改
-    'hook-host': settings.hook.host,
-    debug: true
-});
-
-hook.on('hook::ready', function(){
-  hook.on('*::queued', function( queue ){
+de.on('queued', function( queue ){
     if(queue == settings.queue.remove){
         console.log( queue + "有内容");
         dequeue();
     }
-  });
 });
-hook.connect();
 
 
 setInterval(function(){
