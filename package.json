@@ -1,0 +1,17 @@
+{
+    "name": "deleter",
+    "version": "0.1.0",
+    "description": "delete micro blog to weibo.com",
+    "author": "iamlaobie <iamlaobie@gmail.com>",
+    "dependencies": {
+        "zmq": ">= 2.0.0",
+        "devent": "https://github.com/netgen-inc/devent/tarball/master",
+        "queuer": "https://github.com/netgen-inc/queuer/tarball/master"
+    },
+    "scripts": {
+        "start": "node delete.js"
+    },
+    "engines": {
+        "node": "0.6.x"
+    }
+}
