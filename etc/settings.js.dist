@@ -1,11 +1,10 @@
 var settings = {
     logFile:'microblog.log',
     weibo:{
-        appkey:'196346996',
-        secret:'4b1ee49ec3474192d9c3ed208db79a30',
-        host:'api.weibo.com',
-        update:'/2/statuses/update.json',
-        remove:'/2/statuses/destroy.json',
+        appkey:'196346996', //新浪微博分配的应用编号
+        secret:'4b1ee49ec3474192d9c3ed208db79a30', //新浪微博分配的密钥
+        host:'api.weibo.com',//新浪的服务器
+        remove:'/2/statuses/destroy.json',//删微博的uri
         token:'/oauth2/access_token',
         interval:60 //同一个账号的发微博间隔，单位秒
     },
@@ -16,10 +15,7 @@ var settings = {
         database:'stock_radar'
     },
     queue:{
-        send:'weibo_send',
-        remove:'weibo_delete',
-        host:'172.16.33.237',
-        port:'3000',
+        remove:'weibo_delete', //删微博的任务队列
         interval:10000 //轮询间隔，单位是毫秒
     }
 }
