@@ -7,8 +7,7 @@ var settings = {
         update:'/2/statuses/update.json',
         remove:'/2/statuses/destroy.json',
         token:'/oauth2/access_token',
-        password:'10658068', //ËùÓĞÕËºÅµÄÄ¬ÈÏÃÜÂë,
-        interval:60 //Í¬Ò»¸öÕËºÅµÄ·¢Î¢²©¼ä¸ô£¬µ¥Î»Ãë
+        interval:60 //åŒä¸€ä¸ªè´¦å·çš„å‘å¾®åšé—´éš”ï¼Œå•ä½ç§’
     },
     mysql:{
         host:'172.16.33.237',
@@ -21,12 +20,8 @@ var settings = {
         remove:'weibo_delete',
         host:'172.16.33.237',
         port:'3000',
-        interval:10000 //ÂÖÑ¯¼ä¸ô£¬µ¥Î»ÊÇºÁÃë
-    },
-    hook:{
-        host:'172.16.33.237'    
+        interval:10000 //è½®è¯¢é—´éš”ï¼Œå•ä½æ˜¯æ¯«ç§’
     }
-    
 }
 
 exports.settings = settings;
