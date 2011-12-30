@@ -3,6 +3,7 @@ var url = require('url');
 var queue = require('queuer');
 var de = require('devent').createDEvent('sender');
 var logger = require('./lib/logger').logger(settings.logFile);
+var event = require('events').EventEmitter;
 
 var util = require('util');
 var fs = require('fs');
@@ -38,9 +39,10 @@ setInterval(function(){
 }, settings.queue.interval);
 
 //控制出队频率
-var processCount = 0;
+var removers = [];
 var dequeue = function(){
-    if(processCount >= 10){
+    if(removers.length == 0){
+        console.log('remover is busy');
         return;   
     }
     removeQ.dequeue(function(err, task){
@@ -48,10 +50,9 @@ var dequeue = function(){
             console.log('delete queue is empty');
             return;
         }
-        processCount += 1;
-        var rm = new Remover();
+        var rm = removers.pop();
         rm.on('end', function(){
-           processCount -= 1; 
+            removers.push(rm);
         });
         rm.remove(task);
     });
@@ -63,15 +64,15 @@ var Remover = function(){
         _self.getWeiboByUri(task.uri, function(err, results, fields){
             if(err || results.length == 0){
                 logger.info("DELETE\tNot found the resource\t" + task.uri);
-                hook.emit('task-finished', task); 
+                de.emit('task-finished', task); 
             }else{
                 weibo.remove(results[0], function(statusCode, body){
                     //20101,微博不存在
                     if(statusCode == 200 || body.error_code == 20101){
-                       hook.emit('task-finished', task);
+                       de.emit('task-finished', task);
                        _self.removeSuccess(results[0].id);
                     }else{
-                       hook.emit('task-error', task);
+                       de.emit('task-error', task);
                     }
                 });
             }  
@@ -94,6 +95,10 @@ var Remover = function(){
         myCli.query(sql);
     };
 };
+util.inherits(Remover, event); 
 
-util.inherits(Remover, events.EventEmitter);
+for(i = 0; i < 2; i++){
+    var remover = new Remover();
+    removers.push(remover);
+}
 fs.writeFileSync(__dirname + '/server.pid', process.pid.toString(), 'ascii');

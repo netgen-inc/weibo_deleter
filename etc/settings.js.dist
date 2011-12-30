@@ -16,7 +16,9 @@ var settings = {
     },
     queue:{
         remove:'weibo_delete', //删微博的任务队列
-        interval:10000 //轮询间隔，单位是毫秒
+        interval:10000 //轮询间隔，单位是毫秒,
+        host:'172.16.33.237', //队列服务
+        port:3000 //队列服务的端口
     }
 }
 
