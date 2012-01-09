@@ -3,7 +3,7 @@ var url = require('url');
 var queue = require('queuer');
 var de = require('devent').createDEvent('sender');
 var logger = require('./lib/logger').logger(settings.logFile);
-var event = require('events').EventEmitter;
+var events = require('events');
 
 var util = require('util');
 var fs = require('fs');
@@ -33,6 +33,12 @@ de.on('queued', function( queue ){
     }
 });
 
+/*
+setTimeout(function(){
+    var rm = new Remover();
+    rm.remove({uri:'mysql://172.16.33.237:3306/stock_radar?sent_micro_blog#47'});
+}, 1000);
+*/
 
 setInterval(function(){
     dequeue();    
@@ -42,8 +48,8 @@ setInterval(function(){
 var removers = [];
 var dequeue = function(){
     if(removers.length == 0){
-        console.log('remover is busy');
-        return;   
+        console.log('removers is busy');
+        return;
     }
     removeQ.dequeue(function(err, task){
         if(err == 'empty' || task == undefined){
@@ -51,9 +57,10 @@ var dequeue = function(){
             return;
         }
         var rm = removers.pop();
-        rm.on('end', function(){
-            removers.push(rm);
-        });
+        if(!rm){
+            de.emit('task-error', task);   
+            return;
+        }
         rm.remove(task);
     });
 }
@@ -95,10 +102,12 @@ var Remover = function(){
         myCli.query(sql);
     };
 };
-util.inherits(Remover, event); 
-
+util.inherits(Remover, events.EventEmitter);
 for(i = 0; i < 2; i++){
     var remover = new Remover();
     removers.push(remover);
+    remover.on('end', function(){
+        removers.push(remover);
+    });
 }
 fs.writeFileSync(__dirname + '/server.pid', process.pid.toString(), 'ascii');
