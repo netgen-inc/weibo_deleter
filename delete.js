@@ -1,113 +1,166 @@
-var settings = require('./etc/settings').settings;
-var url = require('url');
-var queue = require('queuer');
-var de = require('devent').createDEvent('sender');
-var logger = require('./lib/logger').logger(settings.logFile);
-var events = require('events');
-
-var util = require('util');
 var fs = require('fs');
+var settings = require(__dirname + '/etc/settings.json');
+var url = require('url');
+var de = require('devent').createDEvent('sender');
+var queue = require('queuer');
+var logger = require('./lib/logger').logger(settings.logFile);
+var util = require('util');
+var event = require('events').EventEmitter;
 
-//删除队列的API
-var removeQ = queue.getQueue('http://'+settings.queue.host+':'+settings.queue.port+'/queue', settings.queue.remove);
+//发送队列的API
+var deleteQ = queue.getQueue('http://'+settings.queue.host+':'+settings.queue.port+'/queue', settings.queue.delete);
 
-//新浪微博的API
-var weibo = require('./lib/sina').weibo;
-weibo.init(settings);
+var Deleter= require('./lib/deleter').Deleter;
 
-//初始化mysql客户端
-var mysql = require('mysql');
-var myCli = mysql.createClient(settings.mysql);
-myCli.query('use ' + settings.mysql.database);
-myCli.query('set names utf8');
+//发送对象保存在该数组中
+var deleters = [];
 
-Date.prototype.getStamp = function(){
-    var time = this.getTime();   
-    return parseInt(time / 1000);
+var db = require('./lib/db').db;
+db.init(settings);
+
+//所有微博账号
+var weiboAccounts = {};
+db.loadAccounts(function(err, accounts){
+    if(err){
+        console.log('!!!load account error!!!');   
+        return;
+    }
+    weiboAccounts = accounts;
+    console.log('access token loaded');
+    //由于发送依赖账号，所以必须先加载完账号才能开始处理发送请求
+    console.log('starting dequeue');
+    start();
+});
+
+var taskBack = function(task,  status){
+    if(status){
+        de.emit('task-finished', task);  
+    }else{
+        de.emit('task-error', task);     
+    }
 }
 
-de.on('queued', function( queue ){
-    if(queue == settings.queue.remove){
-        console.log( queue + "有内容");
-        dequeue();
+var dequeue = function(){
+    for(var i = 0; i < deleters.length; i++){
+        if(settings.mode == 'debug'){
+            console.log('running status--'+ i + '--'+ deleters[i].running);
+        }
+        
+        if(deleters[i].running){
+            continue;   
+        }
+        (function(deleter){
+            deleter.running = true;
+            deleteQ.dequeue(function(err, task){
+                if(err == 'empty' || task == undefined){
+                    deleter.running = false;
+                    console.log('delete queue is empty');
+                    return;
+                }
+                console.log(['dequeue', task]);
+                del(task, deleter, {task:task});
+            });
+        })(deleters[i]);
+    }
+}
+
+var start = function(){
+    setInterval(function(){
+        dequeue();    
+    }, settings.queue.interval);  
+    
+    de.on('queued', function( queue ){
+        if(queue == settings.queue.delete){
+            console.log( queue + "有内容");
+            dequeue();
+        }
+    }); 
+    console.log('deleter start ok'); 
+}
+
+
+var del = function(task, deleter, context){
+    db.getSentBlogByUri(task.uri, function(err, results){
+        if(err || results.length == 0){
+            logger.info("error\tNot found the resource:" + task.uri);
+            deleter.running = false;
+            return; 
+        }
+        
+        blog = results[0];
+        
+        //微博账号错误
+        if(!weiboAccounts[blog.stock_code] || 
+            !weiboAccounts[blog.stock_code].access_token || 
+            !weiboAccounts[blog.stock_code].access_token_secret){
+            logger.info("error\t" + blog.id + "\t" + blog.stock_code + "\tNOT Found the account\t"); 
+            deleter.running = false;
+            taskBack(task, true);
+            return;
+        }
+        deleter.delete(blog, weiboAccounts[blog.stock_code], context);
+    });
+};
+
+
+/**
+ 发送结束后的处理，返回true表示发送完成
+*/
+var complete = function(error, body, blog, task){
+    if(!error){
+        logger.info("success\t" + blog.id + "\t" + blog.weibo_id + "\t"+ blog.stock_code );
+        db.deleteSuccess(blog);
+        return true;
+    }
+    
+    var errMsg = error.error;
+    logger.info("error\t" + blog.id +"\t"+ blog.weibo_id + "\t" + blog.stock_code + "\t" + errMsg);  
+    
+    if(task.retry >= settings.queue.retry){
+        logger.info("error\t" + blog.id +"\t"+ blog.weibo_id + "\t"+ blog.stock_code + "\tretry count more than "+settings.queue.retry);
+        return true;
+    }else{
+        return false;
+    }
+}
+
+
+for(i = 0; i < settings.deletersCount; i++){
+    var deleter = new Deleter();
+    deleter.init(settings);
+    (function(s){
+        s.on('delete', function(error, body, blog, context){
+            s.running = false;
+            taskBack(context.task, complete(error, body, blog, context.task));
+            dequeue();
+        })    
+    })(deleter);
+    deleters.push(deleter);
+}
+
+fs.writeFileSync(__dirname + '/server.pid', process.pid.toString(), 'ascii');
+
+//收到进程信号重新初始化
+process.on('SIGUSR2', function () {
+    settings = require('./etc/settings.json');
+    db.init(settings);
+    for(i = 0; i < senders.length; i++){
+        senders[i].init(settings);
     }
 });
 
-/*
+/**
+ * 测试代码
 setTimeout(function(){
-    var rm = new Remover();
-    rm.remove({uri:'mysql://172.16.33.237:3306/stock_radar?sent_micro_blog#47'});
+    var sender = new Sender();
+    sender.init(settings);
+    var task = {uri:'mysql://abc.com/stock_radar#1'};
+    sender.on('send', function(error, body, blog, context){
+        console.log(error);
+        taskBack(context.task, complete(error, body, blog));
+    });
+    send(task, sender, {task:task});
 }, 1000);
+ 
 */
-
-setInterval(function(){
-    dequeue();    
-}, settings.queue.interval);
-
-//控制出队频率
-var removers = [];
-var dequeue = function(){
-    if(removers.length == 0){
-        console.log('removers is busy');
-        return;
-    }
-    removeQ.dequeue(function(err, task){
-        if(err == 'empty' || task == undefined){
-            console.log('delete queue is empty');
-            return;
-        }
-        var rm = removers.pop();
-        if(!rm){
-            de.emit('task-error', task);   
-            return;
-        }
-        rm.remove(task);
-    });
-}
-
-var Remover = function(){
-    var _self = this;
-    this.remove = function(task){
-        _self.getWeiboByUri(task.uri, function(err, results, fields){
-            if(err || results.length == 0){
-                logger.info("DELETE\tNot found the resource\t" + task.uri);
-                de.emit('task-finished', task); 
-            }else{
-                weibo.remove(results[0], function(statusCode, body){
-                    //20101,微博不存在
-                    if(statusCode == 200 || body.error_code == 20101){
-                       de.emit('task-finished', task);
-                       _self.removeSuccess(results[0].id);
-                    }else{
-                       de.emit('task-error', task);
-                    }
-                });
-            }  
-            _self.emit('end');
-        });
-    };
-    
-    this.getWeiboByUri = function(uri, cb){
-        var uri = url.parse(uri);
-        var id = uri.hash.substring(1);
-        var sql = "select * from sent_micro_blog where id = '" + id + "'";
-        myCli.query(sql, function(err, results, fields){
-            cb.call(null, err, results);
-        });
-    };
-    
-    this.removeSuccess = function(id){
-        var time = new Date().getStamp();
-        var sql = "update sent_micro_blog SET deleted_time = '"+time+"',deleted = 1 WHERE id = '"+id+"'";
-        myCli.query(sql);
-    };
-};
-util.inherits(Remover, events.EventEmitter);
-for(i = 0; i < 2; i++){
-    var remover = new Remover();
-    removers.push(remover);
-    remover.on('end', function(){
-        removers.push(remover);
-    });
-}
-fs.writeFileSync(__dirname + '/server.pid', process.pid.toString(), 'ascii');
+ 
